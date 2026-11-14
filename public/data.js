@@ -51,7 +51,9 @@ window.COCINAPP_SEED = {
   // Recetario inicial (porciones_base = 4)
   recetas: [
     { id: "R01", nombre: "Pastel de choclo", origen: "profesor", autor: "Prof. M. Rojas", estado: "aprobada", nivel: "3° medio", porciones_base: 4, tecnicas: ["sofrito", "gratinado"],
-      ingredientes: [["INS-010", 800], ["INS-011", 400], ["INS-008", 300], ["INS-003", 2], ["INS-025", 40], ["INS-012", 300], ["INS-023", 10], ["INS-005", 20], ["INS-004", 200], ["INS-024", 5]] },
+      // Ejemplo de cambio de componentes con fecha efectiva: desde 2027 menos carne y más albahaca
+      ingredientes: [["INS-010", 800], ["INS-011", 400, "2026-03-01", "2026-12-31"], ["INS-011", 350, "2027-01-01"], ["INS-008", 300], ["INS-003", 2], ["INS-025", 40], ["INS-012", 300],
+        ["INS-023", 10, "2026-03-01", "2026-12-31"], ["INS-023", 15, "2027-01-01"], ["INS-005", 20], ["INS-004", 200], ["INS-024", 5]] },
     { id: "R02", nombre: "Empanadas de pino", origen: "profesor", autor: "Prof. M. Rojas", estado: "aprobada", nivel: "3° medio", porciones_base: 4, tecnicas: ["masa", "horneado"],
       ingredientes: [["INS-001", 500], ["INS-002", 100], ["INS-011", 400], ["INS-008", 400], ["INS-003", 3], ["INS-025", 40], ["INS-024", 5], ["INS-006", 8], ["INS-004", 150]] },
     { id: "R03", nombre: "Sopaipillas con pebre", origen: "profesor", autor: "Prof. C. Muñoz", estado: "aprobada", nivel: "3° medio", porciones_base: 4, tecnicas: ["masa", "fritura"],
@@ -71,7 +73,11 @@ window.COCINAPP_SEED = {
     { id: "R10", nombre: "Pan amasado", origen: "profesor", autor: "Prof. C. Muñoz", estado: "aprobada", nivel: "3° medio", porciones_base: 4, tecnicas: ["fermentación", "horneado"],
       ingredientes: [["INS-001", 500], ["INS-002", 60], ["INS-028", 10], ["INS-006", 8], ["INS-004", 250]] },
     { id: "R11", nombre: "Crema de zapallo con merkén", origen: "alumno", autor: "Tomás R. (4°B)", estado: "propuesta", nivel: "4° medio", porciones_base: 4, tecnicas: ["crema", "emulsión"],
-      ingredientes: [["INS-018", 800], ["INS-008", 150], ["INS-027", 200], ["INS-020", 3], ["INS-002", 30]] }
+      ingredientes: [["INS-018", 800], ["INS-008", 150], ["INS-027", 200], ["INS-020", 3], ["INS-002", 30]] },
+    // Ejemplo de receta dada de baja: ya no se puede programar, pero queda su historial
+    { id: "R12", nombre: "Charquicán con huevo frito", origen: "profesor", autor: "Prof. M. Rojas", estado: "aprobada", nivel: "3° medio", porciones_base: 4, tecnicas: ["guiso", "fritura"],
+      vigenteDesde: "2025-03-01", vigenteHasta: "2026-10-31",
+      ingredientes: [["INS-019", 600, "2025-03-01"], ["INS-018", 400, "2025-03-01"], ["INS-011", 250, "2025-03-01"], ["INS-010", 200, "2025-03-01"], ["INS-008", 150, "2025-03-01"], ["INS-003", 4, "2025-03-01"], ["INS-007", 30, "2025-03-01"]] }
   ],
 
   // Planificación inicial (semana -> curso -> receta)

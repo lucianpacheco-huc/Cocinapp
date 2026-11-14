@@ -73,12 +73,21 @@
   <section id="tab-recetario" class="tab">
     <div class="head">
       <h1>Recetario de la especialidad</h1>
-      <p>Propuestas de alumnos y preparaciones de profesores. Solo las recetas <b>aprobadas</b> pueden programarse en el calendario.</p>
+      <p>Propuestas de alumnos y preparaciones de profesores. Solo las recetas <b>aprobadas y vigentes</b> a la fecha de la clase pueden programarse. Cada receta y cada ingrediente tienen fecha de inicio y de término, para consultar qué se preparó y con qué ingredientes en cualquier fecha.</p>
+    </div>
+    <div class="rc-fechas card">
+      <label>Ver recetario al día<input type="date" id="rc-fecha"></label>
+      <button class="link" id="rc-hoy">Volver a hoy</button>
+      <label>Fecha efectiva de los cambios<input type="date" id="rc-efectiva"></label>
+      <span class="meta">Los cambios de ingredientes empiezan a regir desde esta fecha; lo anterior queda en el historial.</span>
     </div>
     <div class="rc-layout">
       <aside class="card rc-side">
         <div class="rc-tools">
-          <select id="rc-filtro"><option value="">Todas</option><option value="propuesta">Propuestas</option><option value="aprobada">Aprobadas</option></select>
+          <select id="rc-vig"><option value="vigentes">Vigentes</option><option value="no">No vigentes</option><option value="todas">Todas</option></select>
+          <select id="rc-filtro"><option value="">Todo estado</option><option value="propuesta">Propuestas</option><option value="aprobada">Aprobadas</option></select>
+        </div>
+        <div class="rc-tools">
           <button class="link" id="rc-all">Marcar todas</button>
           <button class="link" id="rc-none">Ninguna</button>
         </div>

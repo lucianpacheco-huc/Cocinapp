@@ -88,3 +88,18 @@ button.link{background:none;border:0;color:var(--green-mid);font-weight:700;text
 .rc-names input{width:auto;margin:0;flex:0 0 auto;accent-color:var(--green-mid)}
 .rc-names label span:first-of-type{flex:1}
 .rc-detail{display:grid;gap:12px}
+.rc-fechas{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-bottom:14px;padding:12px}
+.rc-fechas label{margin:0}.rc-fechas input{width:auto}
+.rc-fechas .meta{margin:0;flex-basis:100%}
+.rc-names li.no-vig label>span:first-of-type{color:var(--muted);text-decoration:line-through}
+.vig-box{background:var(--bg);border-radius:8px;padding:10px 12px;margin:8px 0 12px;font-size:13px}
+.vig-edit{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:8px}
+.vig-edit label{margin:0}.vig-edit input,.vig-edit select{width:auto}
+.add-ing{margin:10px 0}
+.card h4{font-size:13px;margin:14px 0 6px;color:var(--text2);text-transform:uppercase;letter-spacing:.03em}
+tr.ln-vencida td{color:var(--muted)}
+tr.ln-vencida td:nth-child(2){text-decoration:line-through}
+tr.ln-futura td{color:var(--blue)}
+.preps{padding-left:18px;font-size:13px;line-height:1.6}
+.cal-warn{background:var(--red-bg)}
+.chip-warn{border-color:var(--red);color:var(--red)}

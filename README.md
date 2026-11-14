@@ -98,6 +98,16 @@ Fecha sugerida = viernes anterior a la semana de clases; ventana horaria selecci
 ### 3.4 Recepción
 Diferencia por línea = recibido − pedido; si alguna línea es menor o no pasa calidad → recepción **PARCIAL**. Solo se contabiliza en SAP lo recibido (> 0).
 
+### 3.5 Vigencias (fechas efectivas) de recetas e ingredientes
+
+Cada **receta** tiene `vigenteDesde` y `vigenteHasta` (vacío = indefinida), y cada **ingrediente** de la receta es una línea con `cantidad`, `desde` y `hasta`.
+
+- **Dar de baja una receta** (ej. charquicán): se pone término = hoy. Hoy todavía está vigente; desde mañana no aparece para programar en el calendario. Se puede reactivar.
+- **Cambiar un ingrediente** con una *fecha efectiva* F: la línea actual se cierra con `hasta = F − 1 día` y se crea una nueva línea con `desde = F`. Quitar un ingrediente cierra su línea; agregar uno crea una línea desde F. **Nunca se borra historia** (solo se pueden anular cambios que aún no entran en vigencia).
+- **Consulta a una fecha**: el recetario se puede ver "al día X", mostrando qué recetas estaban vigentes y con qué ingredientes (vigente / vencida / futura).
+- **Calendario**: en cada celda solo se ofrecen recetas vigentes en la fecha real de esa clase; si una receta programada pierde vigencia, la celda queda marcada con ⚠.
+- **Explosión de materiales**: usa los ingredientes vigentes en la fecha de cada clase, omite recetas no vigentes y guarda una **foto de las preparaciones** (fecha, curso, porciones, ingredientes y cantidades usadas). Así se puede consultar después qué se preparó, cuándo y con qué ingredientes, aunque la receta cambie más tarde.
+
 ---
 
 ## 4. Integración SAP

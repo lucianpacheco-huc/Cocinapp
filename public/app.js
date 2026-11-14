@@ -1,6 +1,6 @@
 /* CocinApp — maqueta funcional (vanilla JS, estado en localStorage). */
 (() => {
-  const KEY = "cocinapp-demo-v1";
+  const KEY = "cocinapp-demo-v2";
   const SEED = window.COCINAPP_SEED;
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -16,11 +16,33 @@
     calendario: JSON.parse(JSON.stringify(SEED.calendario)),
     semanas: {},          // n -> { estado, lineas, firma, liberada, entrega, pedido, recepcion }
     sapLog: [],
-    seq: { receta: 12, pedido: 1 }
+    seq: { receta: 13, pedido: 1 }
   });
   let S;
   try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch { S = fresh(); }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+  // ---------------- Vigencias (fechas efectivas) ----------------
+  // Receta:      vigenteDesde / vigenteHasta (null = indefinida). Fuera de vigencia no se puede programar.
+  // Ingrediente: { sku, cantidad, desde, hasta }. Nunca se borra: se cierra la línea (hasta)
+  //              y se abre una nueva (desde), así se puede consultar la receta a cualquier fecha.
+  const pad = (x) => String(x).padStart(2, "0");
+  const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const sumarDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const fDMY = (iso) => (iso ? iso.split("-").reverse().join("-") : "indefinida");
+  const enVigencia = (desde, hasta, f) => (!desde || desde <= f) && (!hasta || f <= hasta);
+  const recetaVigente = (r, f) => enVigencia(r.vigenteDesde, r.vigenteHasta, f);
+  const ingredientesEn = (r, f) => r.ingredientes.filter((l) => enVigencia(l.desde, l.hasta, f));
+  const estadoLinea = (desde, hasta, f) => (desde && f < desde ? "futura" : hasta && f > hasta ? "vencida" : "vigente");
+  function normalizar(r) {
+    r.vigenteDesde ||= "2026-03-01";
+    if (r.vigenteHasta === undefined) r.vigenteHasta = null;
+    r.ingredientes = r.ingredientes.map((l) => Array.isArray(l)
+      ? { sku: l[0], cantidad: l[1], desde: l[2] || r.vigenteDesde, hasta: l[3] || null }
+      : l);
+    return r;
+  }
+  S.recetas.forEach(normalizar);
 
   const insumo = (sku) => SEED.insumos.find((i) => i.sku === sku);
   const receta = (id) => S.recetas.find((r) => r.id === id);
@@ -64,6 +86,9 @@
   const lunes = (n) => { const d = new Date(SEED.inicioAnio + "T12:00:00"); d.setDate(d.getDate() + (n - 1) * 7); return d; };
   const fISO = (d) => d.toISOString().slice(0, 10);
   const fCorta = (d) => d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+  const DIAS = { Lunes: 0, Martes: 1, "Miércoles": 2, Jueves: 3, Viernes: 4 };
+  // Fecha real de la clase del curso c en la semana n (la vigencia se evalúa contra esta fecha)
+  const fechaClase = (n, c) => sumarDias(fISO(lunes(n)), DIAS[c.dia] || 0);
 
   // ---------------- API helpers (con fallback demo) ----------------
   async function api(fn, body) {
@@ -159,7 +184,8 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
       S.recetas.push({
         id, nombre: r.nombre, origen: autor, autor: quien, estado: "propuesta", nivel, porciones_base: r.porciones_base,
         tecnicas: r.tecnicas, descripcion: r.descripcion, pasos: r.pasos, alergenos: r.alergenos,
-        ingredientes: r.ingredientes.filter((i) => i.sku && insumo(i.sku)).map((i) => [i.sku, i.cantidad]),
+        vigenteDesde: hoy(), vigenteHasta: null,
+        ingredientes: r.ingredientes.filter((i) => i.sku && insumo(i.sku)).map((i) => ({ sku: i.sku, cantidad: i.cantidad, desde: hoy(), hasta: null })),
         sinSku: r.ingredientes.filter((i) => !i.sku || !insumo(i.sku)).map((i) => i.nombre)
       });
       save(); toast(`Propuesta ${id} enviada al recetario`); out.innerHTML = ""; go("recetario");
@@ -169,41 +195,133 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
   // =====================================================================
   // 2. RECETARIO
   // =====================================================================
-  const costoPorcion = (r) => r.ingredientes.reduce((s, [sku, q]) => { const i = insumo(sku); return s + (i ? (q * (1 + i.merma)) / i.factor * i.precio : 0); }, 0) / r.porciones_base;
+  const costoPorcion = (r, f = hoy()) => ingredientesEn(r, f).reduce((s, l) => { const i = insumo(l.sku); return s + (i ? (l.cantidad * (1 + i.merma)) / i.factor * i.precio : 0); }, 0) / r.porciones_base;
+
+  // Fecha de consulta del recetario ("ver la receta tal como era/será ese día")
+  let rcFecha = hoy();
+  const ESTADO_LINEA = { vigente: "b-green", vencida: "b-gray", futura: "b-blue" };
+
+  // Preparaciones registradas (foto tomada al explotar cada semana)
+  const preparacionesDe = (id) => Object.entries(S.semanas)
+    .flatMap(([n, s]) => (s.preparaciones || []).filter((p) => p.recetaId === id).map((p) => ({ ...p, semana: +n })))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  function filtroRecetas() {
+    const f = $("#rc-filtro").value, v = $("#rc-vig").value;
+    return S.recetas.filter((r) => (!f || r.estado === f) &&
+      (v === "todas" || (v === "vigentes") === recetaVigente(r, rcFecha)));
+  }
 
   // Listado de nombres con casillas; se muestra el detalle solo de las marcadas.
   function renderRecetario() {
-    const f = $("#rc-filtro").value;
-    const visibles = S.recetas.filter((r) => !f || r.estado === f);
+    $("#rc-fecha").value = rcFecha;
+    const visibles = filtroRecetas();
     S.verRecetas ||= [];
-    $("#rc-names").innerHTML = visibles.map((r) => `
-      <li><label><input type="checkbox" data-ver="${r.id}" ${S.verRecetas.includes(r.id) ? "checked" : ""}>
-        <span>${esc(r.nombre)}</span>${r.estado === "propuesta" ? ' <span class="badge b-amber">propuesta</span>' : ""}</label></li>`).join("") || '<li class="meta">Sin recetas</li>';
+    $("#rc-names").innerHTML = visibles.map((r) => {
+      const vig = recetaVigente(r, rcFecha), fut = r.vigenteDesde > rcFecha;
+      return `<li class="${vig ? "" : "no-vig"}"><label><input type="checkbox" data-ver="${r.id}" ${S.verRecetas.includes(r.id) ? "checked" : ""}>
+        <span>${esc(r.nombre)}</span>${r.estado === "propuesta" ? ' <span class="badge b-amber">propuesta</span>' : ""}${vig ? "" : ` <span class="badge ${fut ? "b-blue" : "b-red"}">${fut ? "desde " + fDMY(r.vigenteDesde) : "no vigente"}</span>`}</label></li>`;
+    }).join("") || '<li class="meta">Sin recetas para este filtro</li>';
     $$("#rc-names [data-ver]").forEach((c) => c.onchange = () => {
       S.verRecetas = c.checked ? [...S.verRecetas, c.dataset.ver] : S.verRecetas.filter((id) => id !== c.dataset.ver);
       save(); renderRecetario();
     });
+
+    const edita = can("aprobarReceta");
     const marcadas = visibles.filter((r) => S.verRecetas.includes(r.id));
-    $("#rc-list").innerHTML = marcadas.map((r) => `
+    $("#rc-list").innerHTML = marcadas.map((r) => {
+      const vig = recetaVigente(r, rcFecha);
+      const lineas = [...r.ingredientes].sort((a, b) => (insumo(a.sku)?.nombre || "").localeCompare(insumo(b.sku)?.nombre || "") || a.desde.localeCompare(b.desde));
+      const preps = preparacionesDe(r.id);
+      return `
       <div class="card">
         <span class="badge ${r.estado === "aprobada" ? "b-green" : "b-amber"}">${r.estado}</span>
         <span class="badge ${r.origen === "alumno" ? "b-blue" : "b-gray"}">${r.origen}</span>
+        <span class="badge ${vig ? "b-green" : "b-red"}">${vig ? "vigente" : "no vigente"} al ${fDMY(rcFecha)}</span>
         <h3 style="margin-top:8px">${esc(r.nombre)}</h3>
-        <p class="meta">${r.id} · ${esc(r.autor)} · ${esc(r.nivel)} · ${r.porciones_base} porc. · ~${clp(costoPorcion(r))}/porción</p>
-        <div class="ing">${r.ingredientes.map(([sku, q]) => { const i = insumo(sku); return `${esc(i?.nombre || sku)} ${fmt(q)}${i?.unidad || ""}`; }).join(" · ")}
-          ${r.sinSku?.length ? `<br><span class="badge b-red">Sin SKU: ${esc(r.sinSku.join(", "))}</span>` : ""}</div>
+        <p class="meta">${r.id} · ${esc(r.autor)} · ${esc(r.nivel)} · ${r.porciones_base} porc. · ~${clp(costoPorcion(r, rcFecha))}/porción al ${fDMY(rcFecha)}</p>
+
+        <div class="vig-box">
+          <b>Vigencia de la receta:</b> ${fDMY(r.vigenteDesde)} → ${fDMY(r.vigenteHasta)}
+          ${edita ? `<div class="vig-edit">
+            <label>Inicio<input type="date" value="${r.vigenteDesde}" data-vd="${r.id}"></label>
+            <label>Término<input type="date" value="${r.vigenteHasta || ""}" data-vh="${r.id}"></label>
+            ${r.vigenteHasta && r.vigenteHasta <= hoy()
+              ? `<button class="sec" data-reactivar="${r.id}">Reactivar (sin término)</button>`
+              : `<button class="warn" data-baja="${r.id}">Dar de baja hoy</button>`}
+          </div>` : ""}
+        </div>
+
+        <h4>Ingredientes y su vigencia</h4>
+        <div class="table-wrap"><table class="data"><thead><tr><th>Insumo</th><th class="num">Cantidad</th><th>Desde</th><th>Hasta</th><th>Al ${fDMY(rcFecha)}</th>${edita ? "<th>Cambio desde la fecha efectiva</th>" : ""}</tr></thead><tbody>
+          ${lineas.map((l) => {
+            const i = insumo(l.sku), st = estadoLinea(l.desde, l.hasta, rcFecha), k = r.ingredientes.indexOf(l);
+            const abierta = !l.hasta || l.hasta >= rcFecha;
+            return `<tr class="ln-${st}"><td>${esc(i?.nombre || l.sku)}</td><td class="num">${fmt(l.cantidad)} ${i?.unidad || ""}</td><td>${fDMY(l.desde)}</td><td>${fDMY(l.hasta)}</td>
+              <td><span class="badge ${ESTADO_LINEA[st]}">${st}</span></td>
+              ${edita ? `<td>${abierta && st !== "futura" ? `<input type="number" min="0" step="any" value="${l.cantidad}" data-nq="${r.id}:${k}"> <button class="link" data-cambiar="${r.id}:${k}">Cambiar cantidad</button> · <button class="link" data-quitar="${r.id}:${k}">Quitar</button>` : st === "futura" ? `<button class="link" data-anular="${r.id}:${k}">Anular</button>` : ""}</td>` : ""}</tr>`;
+          }).join("")}
+        </tbody></table></div>
+        ${edita ? `<div class="vig-edit add-ing">
+          <label>Agregar insumo<select data-addsku="${r.id}">${SEED.insumos.map((i) => `<option value="${i.sku}">${esc(i.nombre)} (${i.unidad})</option>`).join("")}</select></label>
+          <label>Cantidad<input type="number" min="0" step="any" value="100" data-addq="${r.id}"></label>
+          <button class="sec" data-add="${r.id}">Agregar desde la fecha efectiva</button>
+        </div>` : ""}
+        ${r.sinSku?.length ? `<p><span class="badge b-red">Sin SKU: ${esc(r.sinSku.join(", "))}</span></p>` : ""}
+
+        <h4>Preparaciones registradas</h4>
+        ${preps.length ? `<ul class="preps">${preps.map((p) => `<li><b>${fDMY(p.fecha)}</b> · Semana ${p.semana} · ${esc(p.curso)} · ${p.porciones} porc. — ${p.ingredientes.map((x) => `${esc(x.nombre)} ${fmt(x.cantidad)}${x.unidad}`).join(", ")} <small>(por ${p.porcionesBase} porc.)</small></li>`).join("")}</ul>`
+          : '<p class="meta">Aún no se ha preparado en ninguna semana explotada.</p>'}
+
         <div class="actions">
           ${btn("aprobarReceta", "Evaluar propuesta", "sec", `data-eval="${r.id}"`)}
           ${r.estado === "propuesta" ? btn("aprobarReceta", "✔ Aprobar", "primary", `data-ok="${r.id}"`) : ""}
         </div>
         <div class="eval" id="ev-${r.id}"></div>
-      </div>`).join("") || '<p class="empty">Marca una o más recetas en el listado para ver su detalle.</p>';
+      </div>`;
+    }).join("") || '<p class="empty">Marca una o más recetas en el listado para ver su detalle.</p>';
 
-    $$("[data-ok]").forEach((b) => b.onclick = () => { receta(b.dataset.ok).estado = "aprobada"; save(); renderRecetario(); toast("Receta aprobada: disponible en el calendario"); });
+    // ---- Acciones de vigencia ----
+    const fe = () => $("#rc-efectiva").value || hoy();
+    const ref = (v) => { const [id, k] = v.split(":"); const r = receta(id); return [r, r.ingredientes[+k]]; };
+    const listo = (msg) => { save(); renderAll(); toast(msg); };
+    $$("[data-vd]").forEach((i) => i.onchange = () => { const r = receta(i.dataset.vd); if (!i.value) return renderRecetario(); r.vigenteDesde = i.value; listo(`${r.nombre}: inicio ${fDMY(i.value)}`); });
+    $$("[data-vh]").forEach((i) => i.onchange = () => { const r = receta(i.dataset.vh); r.vigenteHasta = i.value || null; listo(`${r.nombre}: término ${fDMY(r.vigenteHasta)}`); });
+    $$("[data-baja]").forEach((b) => b.onclick = () => {
+      const r = receta(b.dataset.baja);
+      if (!confirm(`¿Dar de baja "${r.nombre}"? Quedará vigente hasta hoy (${fDMY(hoy())}) y desde mañana no estará disponible para programar.`)) return;
+      r.vigenteHasta = hoy(); listo(`${r.nombre}: vigente hasta hoy`);
+    });
+    $$("[data-reactivar]").forEach((b) => b.onclick = () => { const r = receta(b.dataset.reactivar); r.vigenteHasta = null; listo(`${r.nombre}: reactivada`); });
+    $$("[data-cambiar]").forEach((b) => b.onclick = () => {
+      const [r, l] = ref(b.dataset.cambiar), q = +$(`[data-nq="${b.dataset.cambiar}"]`).value, f = fe();
+      if (!(q > 0)) return toast("Cantidad inválida");
+      if (q === l.cantidad) return toast("La cantidad no cambió");
+      if (l.desde >= f) { l.cantidad = q; return listo("Cantidad corregida en la misma línea"); }
+      if (l.hasta && l.hasta < f) return toast("Esa línea ya terminó antes de la fecha efectiva");
+      r.ingredientes.push({ sku: l.sku, cantidad: q, desde: f, hasta: l.hasta });
+      l.hasta = sumarDias(f, -1);
+      listo(`${insumo(l.sku).nombre}: ${fmt(q)} desde ${fDMY(f)} (la cantidad anterior queda hasta ${fDMY(l.hasta)})`);
+    });
+    $$("[data-quitar]").forEach((b) => b.onclick = () => {
+      const [r, l] = ref(b.dataset.quitar), f = fe();
+      if (l.desde >= f) { r.ingredientes.splice(r.ingredientes.indexOf(l), 1); return listo("Línea eliminada (aún no entraba en vigencia)"); }
+      l.hasta = sumarDias(f, -1); listo(`${insumo(l.sku).nombre}: deja de usarse desde ${fDMY(f)}`);
+    });
+    $$("[data-anular]").forEach((b) => b.onclick = () => { const [r, l] = ref(b.dataset.anular); r.ingredientes.splice(r.ingredientes.indexOf(l), 1); listo("Cambio futuro anulado"); });
+    $$("[data-add]").forEach((b) => b.onclick = () => {
+      const r = receta(b.dataset.add), sku = $(`[data-addsku="${r.id}"]`).value, q = +$(`[data-addq="${r.id}"]`).value, f = fe();
+      if (!(q > 0)) return toast("Cantidad inválida");
+      if (ingredientesEn(r, f).some((l) => l.sku === sku)) return toast("Ese insumo ya está vigente a esa fecha: usa «Cambiar cantidad»");
+      r.ingredientes.push({ sku, cantidad: q, desde: f, hasta: r.vigenteHasta });
+      listo(`${insumo(sku).nombre} agregado desde ${fDMY(f)}`);
+    });
+
+    $$("[data-ok]").forEach((b) => b.onclick = () => { receta(b.dataset.ok).estado = "aprobada"; save(); renderAll(); toast("Receta aprobada: disponible en el calendario"); });
     $$("[data-eval]").forEach((b) => b.onclick = async () => {
       const r = receta(b.dataset.eval), box = $("#ev-" + r.id);
       box.innerHTML = '<p class="meta"><span class="spinner"></span> Evaluando…</p>';
-      const payload = { ...r, ingredientes: r.ingredientes.map(([sku, q]) => ({ sku, nombre: insumo(sku)?.nombre, cantidad: q })), costo_porcion_clp: Math.round(costoPorcion(r)) };
+      const payload = { ...r, ingredientes: ingredientesEn(r, rcFecha).map((l) => ({ sku: l.sku, nombre: insumo(l.sku)?.nombre, cantidad: l.cantidad })), costo_porcion_clp: Math.round(costoPorcion(r, rcFecha)) };
       let ev;
       try { ev = (await api("cocinapp-ia", { accion: "evaluar_propuesta", receta: payload })).evaluacion; }
       catch (e) {
@@ -212,14 +330,18 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
           { criterio: "Pertinencia curricular", puntaje: 4, comentario: "Trabaja técnicas del módulo." },
           { criterio: "Identidad / creatividad", puntaje: 3, comentario: "Buena raíz chilena." },
           { criterio: "Factibilidad en taller", puntaje: 3, comentario: "Requiere control de fritura." },
-          { criterio: "Costo por porción", puntaje: 3, comentario: clp(costoPorcion(r)) + " por porción." },
+          { criterio: "Costo por porción", puntaje: 3, comentario: clp(costoPorcion(r, rcFecha)) + " por porción." },
           { criterio: "Inocuidad y alérgenos", puntaje: 3, comentario: "Declarar gluten." }], mejoras: ["Estandarizar gramaje por porción", "Agregar punto crítico de control de temperatura"] };
       }
       box.innerHTML = `<div class="muted-box"><b>${ev.puntaje_total}/20 · ${esc(ev.recomendacion.replace(/_/g, " "))}</b><ul>${ev.criterios.map((c) => `<li>${esc(c.criterio)}: ${c.puntaje}/4 — ${esc(c.comentario)}</li>`).join("")}</ul>${ev.mejoras.length ? `<p class="meta">Mejoras: ${esc(ev.mejoras.join("; "))}</p>` : ""}</div>`;
     });
   }
   $("#rc-filtro").onchange = renderRecetario;
-  $("#rc-all").onclick = () => { const f = $("#rc-filtro").value; S.verRecetas = [...new Set([...(S.verRecetas || []), ...S.recetas.filter((r) => !f || r.estado === f).map((r) => r.id)])]; save(); renderRecetario(); };
+  $("#rc-vig").onchange = renderRecetario;
+  $("#rc-fecha").onchange = (e) => { rcFecha = e.target.value || hoy(); renderRecetario(); };
+  $("#rc-hoy").onclick = () => { rcFecha = hoy(); renderRecetario(); };
+  $("#rc-efectiva").value = hoy();
+  $("#rc-all").onclick = () => { S.verRecetas = [...new Set([...(S.verRecetas || []), ...filtroRecetas().map((r) => r.id)])]; save(); renderRecetario(); };
   $("#rc-none").onclick = () => { S.verRecetas = []; save(); renderRecetario(); };
 
   // =====================================================================
@@ -233,8 +355,13 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
     for (let n = 1; n <= SEED.semanas; n++) {
       const fila = S.calendario[n] || {}, st = S.semanas[n]?.estado || "planificada", bloqueada = idx(st) >= idx("validada");
       h += `<tr><td class="wk">${n}</td><td>${fCorta(lunes(n))}</td>${SEED.cursos.map((c) => {
-        const opts = `<option value="">— sin clase —</option>` + aprobadas.map((r) => `<option value="${r.id}" ${fila[c.id] === r.id ? "selected" : ""}>${esc(r.nombre)}</option>`).join("");
-        return `<td><select data-w="${n}" data-c="${c.id}" ${editable && !bloqueada ? "" : "disabled"}>${opts}</select></td>`;
+        // Solo se ofrecen recetas vigentes en la fecha de esa clase
+        const f = fechaClase(n, c), actual = receta(fila[c.id]);
+        const malo = actual && !recetaVigente(actual, f) && !bloqueada;
+        const opts = `<option value="">— sin clase —</option>` +
+          (malo ? `<option value="${actual.id}" selected>⚠ ${esc(actual.nombre)} (no vigente)</option>` : "") +
+          aprobadas.filter((r) => recetaVigente(r, f) || (bloqueada && r.id === fila[c.id])).map((r) => `<option value="${r.id}" ${fila[c.id] === r.id ? "selected" : ""}>${esc(r.nombre)}</option>`).join("");
+        return `<td class="${malo ? "cal-warn" : ""}" ${malo ? `title="Vigente ${fDMY(actual.vigenteDesde)} → ${fDMY(actual.vigenteHasta)}; la clase es el ${fDMY(f)}"` : ""}><select data-w="${n}" data-c="${c.id}" ${editable && !bloqueada ? "" : "disabled"}>${opts}</select></td>`;
       }).join("")}<td><span class="badge ${COLOR[st]}">${ETQ[st]}</span></td></tr>`;
     }
     $("#cal-table").innerHTML = h + "</tbody>";
@@ -251,29 +378,39 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
   //   bruto[sku]  = Σ_cursos  cant_receta × (alumnos × porc/alumno ÷ porciones_base) × (1 + merma)
   //   neto[sku]   = max(0, bruto − stock_bodega)
   //   compra[sku] = ceil(neto ÷ factor ÷ paso) × paso     (formato de compra del proveedor)
+  //   Vigencia: se usa solo si la receta está vigente en la fecha de la clase, y con los
+  //   ingredientes vigentes ESE día. Se guarda una foto (preparaciones) para consulta histórica.
   function explotar(n) {
-    const fila = S.calendario[n] || {}, agg = {};
+    const fila = S.calendario[n] || {}, agg = {}, preparaciones = [], omitidas = [];
     for (const c of SEED.cursos) {
       const r = receta(fila[c.id]); if (!r) continue;
-      const k = (c.alumnos * c.porcionesPorAlumno) / r.porciones_base;
-      for (const [sku, q] of r.ingredientes) {
+      const f = fechaClase(n, c);
+      if (!recetaVigente(r, f)) { omitidas.push(`${c.nombre}: ${r.nombre}`); continue; }
+      const porciones = c.alumnos * c.porcionesPorAlumno, k = porciones / r.porciones_base, ings = ingredientesEn(r, f);
+      preparaciones.push({ fecha: f, cursoId: c.id, curso: c.nombre, recetaId: r.id, receta: r.nombre, porciones, porcionesBase: r.porciones_base,
+        ingredientes: ings.map((l) => ({ sku: l.sku, nombre: insumo(l.sku)?.nombre, cantidad: l.cantidad, unidad: insumo(l.sku)?.unidad || "", desde: l.desde, hasta: l.hasta })) });
+      for (const { sku, cantidad: q } of ings) {
         const i = insumo(sku); if (!i) continue;
         const a = (agg[sku] ||= { sku, bruto: 0, porNivel: {}, recetas: new Set() });
         const v = q * k * (1 + i.merma);
         a.bruto += v; a.porNivel[c.nivel] = (a.porNivel[c.nivel] || 0) + v; a.recetas.add(r.nombre);
       }
     }
-    return Object.values(agg).map((a) => {
+    const lineas = Object.values(agg).map((a) => {
       const i = insumo(a.sku), neto = Math.max(0, a.bruto - i.stock);
       const compra = neto > 0 ? Math.ceil(neto / i.factor / i.paso - 1e-9) * i.paso : 0;
       return { sku: a.sku, nombre: i.nombre, unidad: i.unidad, compraUnidad: i.compra, bruto: a.bruto, porNivel: a.porNivel, stock: i.stock, neto, compra, ajustada: compra, precio: i.precio, recetas: [...a.recetas] };
     }).sort((x, y) => x.nombre.localeCompare(y.nombre));
+    return { lineas, preparaciones, omitidas };
   }
   const niveles = [...new Set(SEED.cursos.map((c) => c.nivel))];
 
   function renderExplosion() {
     const n = S.semana, s = sem(n), fila = S.calendario[n] || {};
-    $("#ex-clases").innerHTML = SEED.cursos.map((c) => `<div class="chip">${c.nombre} · ${c.dia}: <b>${esc(receta(fila[c.id])?.nombre || "—")}</b> (${c.alumnos * c.porcionesPorAlumno} porc.)</div>`).join("");
+    $("#ex-clases").innerHTML = SEED.cursos.map((c) => {
+      const r = receta(fila[c.id]), f = fechaClase(n, c), nv = r && !recetaVigente(r, f);
+      return `<div class="chip ${nv ? "chip-warn" : ""}">${c.nombre} · ${c.dia} ${fDMY(f)}: <b>${esc(r?.nombre || "—")}</b> (${c.alumnos * c.porcionesPorAlumno} porc.)${nv ? " ⚠ no vigente, se omite" : ""}</div>`;
+    }).join("");
     const bloqueada = idx(s.estado) >= idx("validada");
     $("#ex-btn").disabled = !can("explotar") || bloqueada;
     $("#ex-btn").title = bloqueada ? "La semana ya está validada" : can("explotar") ? "" : "Requiere rol Profesor/a";
@@ -287,10 +424,10 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
       <tfoot><tr><td colspan="${niveles.length + 7}">Total estimado semana ${n} (${L.length} insumos)</td><td class="num">${clp(total)}</td><td></td></tr></tfoot>`;
   }
   $("#ex-btn").onclick = () => {
-    const n = S.semana, lineas = explotar(n);
-    if (!lineas.length) return toast("No hay clases planificadas esta semana");
-    S.semanas[n] = { estado: "explotada", lineas, explotadaAt: new Date().toISOString() };
-    save(); renderAll(); toast(`Semana ${n}: ${lineas.length} insumos explotados`);
+    const n = S.semana, { lineas, preparaciones, omitidas } = explotar(n);
+    if (!lineas.length) return toast(omitidas.length ? "Las recetas de esta semana no están vigentes" : "No hay clases planificadas esta semana");
+    S.semanas[n] = { estado: "explotada", lineas, preparaciones, explotadaAt: new Date().toISOString() };
+    save(); renderAll(); toast(`Semana ${n}: ${lineas.length} insumos explotados${omitidas.length ? ` · omitidas por vigencia: ${omitidas.join(", ")}` : ""}`);
   };
 
   // =====================================================================
