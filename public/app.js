@@ -45,8 +45,18 @@
   };
   const can = (a) => PERM[a].includes(S.rol);
   const NOMBRE_ROL = { alumno: "Alumno/a", profesor: "Profesor/a", coordinador: "Coordinador/a", proveedor: "Proveedor", bodega: "Bodega" };
-  const btn = (accion, label, cls, attrs = "") =>
-    `<button class="${cls}" ${attrs} ${can(accion) ? "" : `disabled title="Requiere rol: ${PERM[accion].map((r) => NOMBRE_ROL[r]).join(" / ")}"`}>${label}</button>`;
+  // Botón con control de rol: si el rol actual no puede, queda deshabilitado
+  // y al lado aparece un acceso directo para cambiar al rol que corresponde (demo).
+  const btn = (accion, label, cls, attrs = "") => {
+    if (can(accion)) return `<button class="${cls}" ${attrs}>${label}</button>`;
+    const rol = PERM[accion][0];
+    return `<button class="${cls}" ${attrs} disabled title="Requiere rol: ${PERM[accion].map((r) => NOMBRE_ROL[r]).join(" / ")}">${label}</button>
+      <span class="need-role">🔒 Requiere rol <b>${PERM[accion].map((r) => NOMBRE_ROL[r]).join(" o ")}</b> · <button class="link" data-switch="${rol}">Cambiar a ${NOMBRE_ROL[rol]}</button></span>`;
+  };
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-switch]"); if (!b) return;
+    S.rol = b.dataset.switch; $("#rol").value = S.rol; save(); renderAll(); toast("Rol: " + NOMBRE_ROL[S.rol]);
+  });
 
   const toast = (msg) => { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3200); };
 

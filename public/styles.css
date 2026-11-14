@@ -15,7 +15,7 @@ code{background:var(--green-bg);padding:1px 5px;border-radius:4px;font-size:12px
 .sub{display:block;font-size:12px;opacity:.8}
 .top-actions{display:flex;gap:10px;align-items:center}
 .role{font-size:12px;color:#fff;margin:0;display:flex;gap:6px;align-items:center}
-.role select{padding:5px 8px;border-radius:6px;border:0}
+.role select{display:inline-block;width:auto;margin:0;padding:5px 8px;border-radius:6px;border:0}
 .ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:5px 10px;cursor:pointer}
 .steps{display:flex;overflow-x:auto;gap:4px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
 .steps button{flex:0 0 auto;display:flex;align-items:center;gap:6px;background:none;border:1px solid transparent;border-radius:20px;padding:6px 12px;color:var(--text2);cursor:pointer;font-size:13px}
@@ -73,3 +73,6 @@ tfoot td{font-weight:700}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .empty{padding:30px;text-align:center;color:var(--muted)}
+.need-role{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:12px;color:var(--amber);background:var(--amber-bg);padding:6px 10px;border-radius:6px}
+button.link{background:none;border:0;color:var(--green-mid);font-weight:700;text-decoration:underline;cursor:pointer;font-size:12px;padding:0}
+.brand{min-width:0}.sub{overflow-wrap:anywhere}
