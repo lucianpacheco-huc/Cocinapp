@@ -103,7 +103,7 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
 
   $("#ea-btn").onclick = async () => {
     const out = $("#ea-out"), b = $("#ea-btn");
-    b.disabled = true; out.innerHTML = '<span class="spinner"></span> Claude está investigando en la web…';
+    b.disabled = true; out.innerHTML = '<span class="spinner"></span> Investigando el estado del arte…';
     try {
       const r = await api("cocinapp-ia", { accion: "estado_arte", tema: $("#ea-tema").value, ambito: $("#ea-ambito").value });
       out.innerHTML = md(r.informe);
@@ -137,7 +137,7 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
     const out = $("#pr-out"), b = $("#pr-btn");
     const idea = $("#pr-idea").value.trim(), nivel = $("#pr-nivel").value, autor = $("#pr-autor").value;
     if (!idea) return toast("Escribe la idea del plato");
-    b.disabled = true; out.innerHTML = '<p class="meta"><span class="spinner"></span> Claude está estandarizando la receta…</p>';
+    b.disabled = true; out.innerHTML = '<p class="meta"><span class="spinner"></span> Estandarizando la receta…</p>';
     let r;
     try {
       r = (await api("cocinapp-ia", { accion: "desarrollar_receta", idea, autor, nivel, catalogo: SEED.insumos.map(({ sku, nombre, unidad }) => ({ sku, nombre, unidad })) })).receta;
@@ -171,9 +171,20 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
   // =====================================================================
   const costoPorcion = (r) => r.ingredientes.reduce((s, [sku, q]) => { const i = insumo(sku); return s + (i ? (q * (1 + i.merma)) / i.factor * i.precio : 0); }, 0) / r.porciones_base;
 
+  // Listado de nombres con casillas; se muestra el detalle solo de las marcadas.
   function renderRecetario() {
     const f = $("#rc-filtro").value;
-    $("#rc-list").innerHTML = S.recetas.filter((r) => !f || r.estado === f).map((r) => `
+    const visibles = S.recetas.filter((r) => !f || r.estado === f);
+    S.verRecetas ||= [];
+    $("#rc-names").innerHTML = visibles.map((r) => `
+      <li><label><input type="checkbox" data-ver="${r.id}" ${S.verRecetas.includes(r.id) ? "checked" : ""}>
+        <span>${esc(r.nombre)}</span>${r.estado === "propuesta" ? ' <span class="badge b-amber">propuesta</span>' : ""}</label></li>`).join("") || '<li class="meta">Sin recetas</li>';
+    $$("#rc-names [data-ver]").forEach((c) => c.onchange = () => {
+      S.verRecetas = c.checked ? [...S.verRecetas, c.dataset.ver] : S.verRecetas.filter((id) => id !== c.dataset.ver);
+      save(); renderRecetario();
+    });
+    const marcadas = visibles.filter((r) => S.verRecetas.includes(r.id));
+    $("#rc-list").innerHTML = marcadas.map((r) => `
       <div class="card">
         <span class="badge ${r.estado === "aprobada" ? "b-green" : "b-amber"}">${r.estado}</span>
         <span class="badge ${r.origen === "alumno" ? "b-blue" : "b-gray"}">${r.origen}</span>
@@ -182,11 +193,11 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
         <div class="ing">${r.ingredientes.map(([sku, q]) => { const i = insumo(sku); return `${esc(i?.nombre || sku)} ${fmt(q)}${i?.unidad || ""}`; }).join(" · ")}
           ${r.sinSku?.length ? `<br><span class="badge b-red">Sin SKU: ${esc(r.sinSku.join(", "))}</span>` : ""}</div>
         <div class="actions">
-          ${btn("aprobarReceta", "🤖 Evaluar con IA", "sec", `data-eval="${r.id}"`)}
+          ${btn("aprobarReceta", "Evaluar propuesta", "sec", `data-eval="${r.id}"`)}
           ${r.estado === "propuesta" ? btn("aprobarReceta", "✔ Aprobar", "primary", `data-ok="${r.id}"`) : ""}
         </div>
         <div class="eval" id="ev-${r.id}"></div>
-      </div>`).join("") || '<p class="empty">Sin recetas</p>';
+      </div>`).join("") || '<p class="empty">Marca una o más recetas en el listado para ver su detalle.</p>';
 
     $$("[data-ok]").forEach((b) => b.onclick = () => { receta(b.dataset.ok).estado = "aprobada"; save(); renderRecetario(); toast("Receta aprobada: disponible en el calendario"); });
     $$("[data-eval]").forEach((b) => b.onclick = async () => {
@@ -208,6 +219,8 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
     });
   }
   $("#rc-filtro").onchange = renderRecetario;
+  $("#rc-all").onclick = () => { const f = $("#rc-filtro").value; S.verRecetas = [...new Set([...(S.verRecetas || []), ...S.recetas.filter((r) => !f || r.estado === f).map((r) => r.id)])]; save(); renderRecetario(); };
+  $("#rc-none").onclick = () => { S.verRecetas = []; save(); renderRecetario(); };
 
   // =====================================================================
   // 3. CALENDARIO

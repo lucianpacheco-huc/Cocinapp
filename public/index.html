@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CocinApp — Gestión de talleres de cocina</title>
-<meta name="description" content="CocinApp: ideación con IA, planificación anual de clases, explosión de materiales, pedidos al proveedor, recepción e integración SAP para colegios con especialidad de Gastronomía.">
+<meta name="description" content="CocinApp: ideación, planificación anual de clases, explosión de materiales, pedidos al proveedor, recepción e integración SAP para colegios con especialidad de Gastronomía.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,7 +28,7 @@
 </header>
 
 <nav class="steps" id="tabs">
-  <button data-tab="ideacion" class="active"><span>1</span>Ideación IA</button>
+  <button data-tab="ideacion" class="active"><span>1</span>Ideación</button>
   <button data-tab="recetario"><span>2</span>Recetario</button>
   <button data-tab="calendario"><span>3</span>Calendario anual</button>
   <button data-tab="explosion"><span>4</span>Explosión de materiales</button>
@@ -42,8 +42,8 @@
   <!-- 1. IDEACIÓN -->
   <section id="tab-ideacion" class="tab active">
     <div class="head">
-      <h1>Etapa creativa con IA</h1>
-      <p>Claude investiga el estado del arte de la cocina chilena y mundial; alumnos y profesores proponen platos y la IA los convierte en recetas estandarizadas listas para planificar.</p>
+      <h1>Ideación</h1>
+      <p>Revisa el estado del arte de la cocina chilena y mundial. Alumnos y profesores proponen platos que se convierten en recetas estandarizadas, listas para planificar.</p>
     </div>
     <div class="grid2">
       <div class="card">
@@ -52,7 +52,7 @@
         <label>Ámbito
           <select id="ea-ambito"><option>nacional y mundial</option><option>nacional (Chile)</option><option>Latinoamérica</option><option>mundial</option></select>
         </label>
-        <button id="ea-btn" class="primary">Investigar con Claude + búsqueda web</button>
+        <button id="ea-btn" class="primary">Investigar estado del arte</button>
         <div id="ea-out" class="md muted-box">El informe aparecerá aquí.</div>
       </div>
       <div class="card">
@@ -63,7 +63,7 @@
         <label>Nombre de quien propone<input id="pr-nombre" value="Martina G. (3°A)"></label>
         <label>Nivel<select id="pr-nivel"><option>3° medio</option><option>4° medio</option></select></label>
         <label>Idea del plato<textarea id="pr-idea" rows="4">Una versión de sopaipilla rellena con pino de zapallo y queso de cabra, con pebre de cilantro y merkén.</textarea></label>
-        <button id="pr-btn" class="primary">Desarrollar receta con IA</button>
+        <button id="pr-btn" class="primary">Desarrollar receta</button>
         <div id="pr-out"></div>
       </div>
     </div>
@@ -75,10 +75,17 @@
       <h1>Recetario de la especialidad</h1>
       <p>Propuestas de alumnos y preparaciones de profesores. Solo las recetas <b>aprobadas</b> pueden programarse en el calendario.</p>
     </div>
-    <div class="filters">
-      <select id="rc-filtro"><option value="">Todas</option><option value="propuesta">Propuestas</option><option value="aprobada">Aprobadas</option></select>
+    <div class="rc-layout">
+      <aside class="card rc-side">
+        <div class="rc-tools">
+          <select id="rc-filtro"><option value="">Todas</option><option value="propuesta">Propuestas</option><option value="aprobada">Aprobadas</option></select>
+          <button class="link" id="rc-all">Marcar todas</button>
+          <button class="link" id="rc-none">Ninguna</button>
+        </div>
+        <ul id="rc-names" class="rc-names"></ul>
+      </aside>
+      <div id="rc-list" class="rc-detail"></div>
     </div>
-    <div id="rc-list" class="cards"></div>
   </section>
 
   <!-- 3. CALENDARIO -->
