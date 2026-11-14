@@ -1,0 +1,8 @@
+{
+  "name": "cocinapp",
+  "private": true,
+  "description": "CocinApp — gestión de talleres de cocina para colegios con especialidad de Gastronomía",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  }
+}

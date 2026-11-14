@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CocinApp — Gestión de talleres de cocina</title>
+<meta name="description" content="CocinApp: ideación con IA, planificación anual de clases, explosión de materiales, pedidos al proveedor, recepción e integración SAP para colegios con especialidad de Gastronomía.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🍳 Cocin<b>App</b></span>
+    <span class="sub" id="colegio"></span>
+  </div>
+  <div class="top-actions">
+    <label class="role">Rol
+      <select id="rol">
+        <option value="alumno">Alumno/a</option>
+        <option value="profesor">Profesor/a</option>
+        <option value="coordinador" selected>Profesor/a coordinador/a</option>
+        <option value="proveedor">Proveedor</option>
+        <option value="bodega">Bodega / Recepción</option>
+      </select>
+    </label>
+    <button class="ghost" id="reset" title="Restaurar datos de demo">↺ Demo</button>
+  </div>
+</header>
+
+<nav class="steps" id="tabs">
+  <button data-tab="ideacion" class="active"><span>1</span>Ideación IA</button>
+  <button data-tab="recetario"><span>2</span>Recetario</button>
+  <button data-tab="calendario"><span>3</span>Calendario anual</button>
+  <button data-tab="explosion"><span>4</span>Explosión de materiales</button>
+  <button data-tab="validacion"><span>5</span>Validar y liberar</button>
+  <button data-tab="proveedor"><span>6</span>Proveedor · Pedidos</button>
+  <button data-tab="recepcion"><span>7</span>Recepción</button>
+  <button data-tab="sap"><span>8</span>Integración SAP</button>
+</nav>
+
+<main id="app">
+  <!-- 1. IDEACIÓN -->
+  <section id="tab-ideacion" class="tab active">
+    <div class="head">
+      <h1>Etapa creativa con IA</h1>
+      <p>Claude investiga el estado del arte de la cocina chilena y mundial; alumnos y profesores proponen platos y la IA los convierte en recetas estandarizadas listas para planificar.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>🔎 Estado del arte</h2>
+        <label>Tema<input id="ea-tema" value="Cocina chilena de autor con productos de temporada de otoño"></label>
+        <label>Ámbito
+          <select id="ea-ambito"><option>nacional y mundial</option><option>nacional (Chile)</option><option>Latinoamérica</option><option>mundial</option></select>
+        </label>
+        <button id="ea-btn" class="primary">Investigar con Claude + búsqueda web</button>
+        <div id="ea-out" class="md muted-box">El informe aparecerá aquí.</div>
+      </div>
+      <div class="card">
+        <h2>💡 Proponer un plato</h2>
+        <label>Autor
+          <select id="pr-autor"><option value="alumno">Alumno/a</option><option value="profesor">Profesor/a</option></select>
+        </label>
+        <label>Nombre de quien propone<input id="pr-nombre" value="Martina G. (3°A)"></label>
+        <label>Nivel<select id="pr-nivel"><option>3° medio</option><option>4° medio</option></select></label>
+        <label>Idea del plato<textarea id="pr-idea" rows="4">Una versión de sopaipilla rellena con pino de zapallo y queso de cabra, con pebre de cilantro y merkén.</textarea></label>
+        <button id="pr-btn" class="primary">Desarrollar receta con IA</button>
+        <div id="pr-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. RECETARIO -->
+  <section id="tab-recetario" class="tab">
+    <div class="head">
+      <h1>Recetario de la especialidad</h1>
+      <p>Propuestas de alumnos y preparaciones de profesores. Solo las recetas <b>aprobadas</b> pueden programarse en el calendario.</p>
+    </div>
+    <div class="filters">
+      <select id="rc-filtro"><option value="">Todas</option><option value="propuesta">Propuestas</option><option value="aprobada">Aprobadas</option></select>
+    </div>
+    <div id="rc-list" class="cards"></div>
+  </section>
+
+  <!-- 3. CALENDARIO -->
+  <section id="tab-calendario" class="tab">
+    <div class="head">
+      <h1>Calendario anual de clases</h1>
+      <p>El/la profesor/a coordinador/a define qué preparación se realiza cada semana en cada curso. <span id="cal-perm"></span></p>
+    </div>
+    <div class="table-wrap"><table id="cal-table" class="cal"></table></div>
+  </section>
+
+  <!-- 4. EXPLOSIÓN -->
+  <section id="tab-explosion" class="tab">
+    <div class="head">
+      <h1>Explosión de materiales (BOM) semanal</h1>
+      <p>Receta × porciones por curso × merma − stock en bodega, redondeado al formato de compra. Consolidado para todo el colegio y desglosado por nivel.</p>
+    </div>
+    <div class="weekbar"><label>Semana <select class="sel-semana"></select></label><span class="estado-badge"></span></div>
+    <div id="ex-clases" class="chips"></div>
+    <div class="actions"><button id="ex-btn" class="primary">⚙️ Explotar lista de materiales</button></div>
+    <div class="table-wrap"><table id="ex-table" class="data"></table></div>
+  </section>
+
+  <!-- 5. VALIDACIÓN -->
+  <section id="tab-validacion" class="tab">
+    <div class="head">
+      <h1>Validación, firma y liberación</h1>
+      <p>El profesor revisa y ajusta cantidades, firma la lista (queda "firme") y la libera al proveedor.</p>
+    </div>
+    <div class="weekbar"><label>Semana <select class="sel-semana"></select></label><span class="estado-badge"></span></div>
+    <div id="va-body"></div>
+  </section>
+
+  <!-- 6. PROVEEDOR -->
+  <section id="tab-proveedor" class="tab">
+    <div class="head">
+      <h1>Portal del proveedor</h1>
+      <p>El proveedor ve las semanas liberadas, programa la entrega y cada entrega se transforma en una <b>solicitud de pedido</b> (Orden de compra en SAP).</p>
+    </div>
+    <div id="pv-body"></div>
+  </section>
+
+  <!-- 7. RECEPCIÓN -->
+  <section id="tab-recepcion" class="tab">
+    <div class="head">
+      <h1>Recepción de pedidos</h1>
+      <p>Bodega o profesor registra lo recibido, diferencias y calidad. Genera la entrada de mercancías en SAP.</p>
+    </div>
+    <div id="re-body"></div>
+  </section>
+
+  <!-- 8. SAP -->
+  <section id="tab-sap" class="tab">
+    <div class="head">
+      <h1>Integración ERP SAP</h1>
+      <p>Documentos enviados vía SAP Business One Service Layer: <code>PurchaseOrders</code> (OC) y <code>PurchaseDeliveryNotes</code> (Entrada de mercancías). Sin credenciales se usa modo simulado.</p>
+    </div>
+    <div class="table-wrap"><table id="sap-table" class="data"></table></div>
+    <pre id="sap-payload" class="payload hidden"></pre>
+  </section>
+</main>
+
+<div id="toast"></div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

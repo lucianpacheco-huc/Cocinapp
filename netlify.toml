@@ -1,0 +1,10 @@
+# CocinApp — sitio Netlify independiente
+# Sitio Netlify conectado al repositorio Cocinapp (base directory = raíz)
+[build]
+  publish   = "public"
+  functions = "netlify/functions"
+  # Solo reconstruye si cambió algo dentro de cocinapp/
+  ignore    = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ."
+
+[functions]
+  node_bundler = "esbuild"
