@@ -3,7 +3,7 @@
 [build]
   publish   = "public"
   functions = "netlify/functions"
-  # Solo reconstruye si cambió algo dentro de cocinapp/
+  # Omite el deploy si no hubo cambios desde el último
   ignore    = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ."
 
 [functions]
