@@ -212,6 +212,27 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
       (v === "todas" || (v === "vigentes") === recetaVigente(r, rcFecha)));
   }
 
+  // Fila nueva abierta con el botón + (rid = receta, after = índice de la línea bajo la cual se abre)
+  let nuevaFila = null;
+  function filaNueva(r, base) {
+    const desde = base?.hasta ? sumarDias(base.hasta, 1) : hoy();
+    return `<tr class="ln-nueva"><td><select data-nsku>${SEED.insumos.map((i) => `<option value="${i.sku}" ${base?.sku === i.sku ? "selected" : ""}>${esc(i.nombre)} (${i.unidad})</option>`).join("")}</select></td>
+      <td class="num"><input type="number" min="0" step="any" value="${base?.cantidad ?? 100}" data-nq></td>
+      <td><input type="date" value="${desde}" data-nd></td>
+      <td><input type="date" value="${r.vigenteHasta || ""}" data-nh></td>
+      <td colspan="2" class="acc"><button class="primary sm" data-nsave="${r.id}">Guardar</button> <button class="link" data-ncancel>Cancelar</button></td></tr>`;
+  }
+  // Una línea es válida si tiene cantidad, inicio, término ≥ inicio y no se superpone con otra del mismo insumo
+  const seSuperponen = (a, b) => (!a.hasta || b.desde <= a.hasta) && (!b.hasta || a.desde <= b.hasta);
+  function errorLinea(r, l, ignorar) {
+    if (!(l.cantidad > 0)) return "La cantidad debe ser mayor que cero";
+    if (!l.desde) return "Falta la fecha de inicio";
+    if (l.hasta && l.hasta < l.desde) return "El término no puede ser anterior al inicio";
+    const otra = r.ingredientes.find((o) => o !== ignorar && o.sku === l.sku && seSuperponen(o, l));
+    if (otra) return `Se superpone con ${insumo(l.sku).nombre} ${fmt(otra.cantidad)} vigente ${fDMY(otra.desde)} → ${fDMY(otra.hasta)}. Ajusta el término de esa línea primero.`;
+    return null;
+  }
+
   // Listado de nombres con casillas; se muestra el detalle solo de las marcadas.
   function renderRecetario() {
     $("#rc-fecha").value = rcFecha;
@@ -253,20 +274,22 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
         </div>
 
         <h4>Ingredientes y su vigencia</h4>
-        <div class="table-wrap"><table class="data"><thead><tr><th>Insumo</th><th class="num">Cantidad</th><th>Desde</th><th>Hasta</th><th>Al ${fDMY(rcFecha)}</th>${edita ? "<th>Cambio desde la fecha efectiva</th>" : ""}</tr></thead><tbody>
+        <div class="table-wrap"><table class="data grilla"><thead><tr><th>Insumo</th><th class="num">Cantidad</th><th>Inicio</th><th>Término</th><th>Al ${fDMY(rcFecha)}</th>${edita ? `<th class="acc"><button class="plus" data-plus="${r.id}:-1" title="Agregar componente">+</button></th>` : ""}</tr></thead><tbody>
           ${lineas.map((l) => {
-            const i = insumo(l.sku), st = estadoLinea(l.desde, l.hasta, rcFecha), k = r.ingredientes.indexOf(l);
-            const abierta = !l.hasta || l.hasta >= rcFecha;
-            return `<tr class="ln-${st}"><td>${esc(i?.nombre || l.sku)}</td><td class="num">${fmt(l.cantidad)} ${i?.unidad || ""}</td><td>${fDMY(l.desde)}</td><td>${fDMY(l.hasta)}</td>
-              <td><span class="badge ${ESTADO_LINEA[st]}">${st}</span></td>
-              ${edita ? `<td>${abierta && st !== "futura" ? `<input type="number" min="0" step="any" value="${l.cantidad}" data-nq="${r.id}:${k}"> <button class="link" data-cambiar="${r.id}:${k}">Cambiar cantidad</button> · <button class="link" data-quitar="${r.id}:${k}">Quitar</button>` : st === "futura" ? `<button class="link" data-anular="${r.id}:${k}">Anular</button>` : ""}</td>` : ""}</tr>`;
+            const i = insumo(l.sku), st = estadoLinea(l.desde, l.hasta, rcFecha), k = r.ingredientes.indexOf(l), key = `${r.id}:${k}`;
+            const fila = edita
+              ? `<tr class="ln-${st}"><td>${esc(i?.nombre || l.sku)}</td>
+                  <td class="num"><input type="number" min="0" step="any" value="${l.cantidad}" data-lq="${key}"> ${i?.unidad || ""}</td>
+                  <td><input type="date" value="${l.desde || ""}" data-ld="${key}"></td>
+                  <td><input type="date" value="${l.hasta || ""}" data-lh="${key}"></td>
+                  <td><span class="badge ${ESTADO_LINEA[st]}">${st}</span></td>
+                  <td class="acc"><button class="plus" data-plus="${key}" title="Agregar componente debajo">+</button><button class="del" data-del="${key}" title="Eliminar línea">🗑</button></td></tr>`
+              : `<tr class="ln-${st}"><td>${esc(i?.nombre || l.sku)}</td><td class="num">${fmt(l.cantidad)} ${i?.unidad || ""}</td><td>${fDMY(l.desde)}</td><td>${fDMY(l.hasta)}</td><td><span class="badge ${ESTADO_LINEA[st]}">${st}</span></td></tr>`;
+            return fila + (nuevaFila?.rid === r.id && nuevaFila.after === k ? filaNueva(r, l) : "");
           }).join("")}
+          ${nuevaFila?.rid === r.id && nuevaFila.after === -1 ? filaNueva(r, null) : ""}
+          ${!lineas.length && !(nuevaFila?.rid === r.id) ? `<tr><td colspan="6" class="meta">Sin componentes. Usa + para agregar.</td></tr>` : ""}
         </tbody></table></div>
-        ${edita ? `<div class="vig-edit add-ing">
-          <label>Agregar insumo<select data-addsku="${r.id}">${SEED.insumos.map((i) => `<option value="${i.sku}">${esc(i.nombre)} (${i.unidad})</option>`).join("")}</select></label>
-          <label>Cantidad<input type="number" min="0" step="any" value="100" data-addq="${r.id}"></label>
-          <button class="sec" data-add="${r.id}">Agregar desde la fecha efectiva</button>
-        </div>` : ""}
         ${r.sinSku?.length ? `<p><span class="badge b-red">Sin SKU: ${esc(r.sinSku.join(", "))}</span></p>` : ""}
 
         <h4>Preparaciones registradas</h4>
@@ -282,7 +305,6 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
     }).join("") || '<p class="empty">Marca una o más recetas en el listado para ver su detalle.</p>';
 
     // ---- Acciones de vigencia ----
-    const fe = () => $("#rc-efectiva").value || hoy();
     const ref = (v) => { const [id, k] = v.split(":"); const r = receta(id); return [r, r.ingredientes[+k]]; };
     const listo = (msg) => { save(); renderAll(); toast(msg); };
     $$("[data-vd]").forEach((i) => i.onchange = () => { const r = receta(i.dataset.vd); if (!i.value) return renderRecetario(); r.vigenteDesde = i.value; listo(`${r.nombre}: inicio ${fDMY(i.value)}`); });
@@ -293,28 +315,30 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
       r.vigenteHasta = hoy(); listo(`${r.nombre}: vigente hasta hoy`);
     });
     $$("[data-reactivar]").forEach((b) => b.onclick = () => { const r = receta(b.dataset.reactivar); r.vigenteHasta = null; listo(`${r.nombre}: reactivada`); });
-    $$("[data-cambiar]").forEach((b) => b.onclick = () => {
-      const [r, l] = ref(b.dataset.cambiar), q = +$(`[data-nq="${b.dataset.cambiar}"]`).value, f = fe();
-      if (!(q > 0)) return toast("Cantidad inválida");
-      if (q === l.cantidad) return toast("La cantidad no cambió");
-      if (l.desde >= f) { l.cantidad = q; return listo("Cantidad corregida en la misma línea"); }
-      if (l.hasta && l.hasta < f) return toast("Esa línea ya terminó antes de la fecha efectiva");
-      r.ingredientes.push({ sku: l.sku, cantidad: q, desde: f, hasta: l.hasta });
-      l.hasta = sumarDias(f, -1);
-      listo(`${insumo(l.sku).nombre}: ${fmt(q)} desde ${fDMY(f)} (la cantidad anterior queda hasta ${fDMY(l.hasta)})`);
+    // Edición directa en la grilla (cantidad, inicio, término)
+    const editar = (sel, campo, conv) => $$(sel).forEach((inp) => inp.onchange = () => {
+      const [r, l] = ref(inp.dataset[campo]), cand = { ...l, [conv.k]: conv.v(inp.value) };
+      const err = errorLinea(r, cand, l);
+      if (err) { toast(err); return renderRecetario(); }
+      Object.assign(l, cand); listo(`${insumo(l.sku).nombre}: ${fmt(l.cantidad)} · ${fDMY(l.desde)} → ${fDMY(l.hasta)}`);
     });
-    $$("[data-quitar]").forEach((b) => b.onclick = () => {
-      const [r, l] = ref(b.dataset.quitar), f = fe();
-      if (l.desde >= f) { r.ingredientes.splice(r.ingredientes.indexOf(l), 1); return listo("Línea eliminada (aún no entraba en vigencia)"); }
-      l.hasta = sumarDias(f, -1); listo(`${insumo(l.sku).nombre}: deja de usarse desde ${fDMY(f)}`);
+    editar("[data-lq]", "lq", { k: "cantidad", v: (x) => +x });
+    editar("[data-ld]", "ld", { k: "desde", v: (x) => x || null });
+    editar("[data-lh]", "lh", { k: "hasta", v: (x) => x || null });
+    $$("[data-del]").forEach((b) => b.onclick = () => {
+      const [r, l] = ref(b.dataset.del);
+      if (!confirm(`¿Eliminar la línea ${insumo(l.sku).nombre} ${fmt(l.cantidad)} (${fDMY(l.desde)} → ${fDMY(l.hasta)})?\nPara dejar de usarlo conservando el historial, mejor pon una fecha de término.`)) return;
+      r.ingredientes.splice(r.ingredientes.indexOf(l), 1); listo("Línea eliminada");
     });
-    $$("[data-anular]").forEach((b) => b.onclick = () => { const [r, l] = ref(b.dataset.anular); r.ingredientes.splice(r.ingredientes.indexOf(l), 1); listo("Cambio futuro anulado"); });
-    $$("[data-add]").forEach((b) => b.onclick = () => {
-      const r = receta(b.dataset.add), sku = $(`[data-addsku="${r.id}"]`).value, q = +$(`[data-addq="${r.id}"]`).value, f = fe();
-      if (!(q > 0)) return toast("Cantidad inválida");
-      if (ingredientesEn(r, f).some((l) => l.sku === sku)) return toast("Ese insumo ya está vigente a esa fecha: usa «Cambiar cantidad»");
-      r.ingredientes.push({ sku, cantidad: q, desde: f, hasta: r.vigenteHasta });
-      listo(`${insumo(sku).nombre} agregado desde ${fDMY(f)}`);
+    $$("[data-plus]").forEach((b) => b.onclick = () => { const [rid, k] = b.dataset.plus.split(":"); nuevaFila = { rid, after: +k }; renderRecetario(); $("[data-nq]")?.focus(); });
+    $$("[data-ncancel]").forEach((b) => b.onclick = () => { nuevaFila = null; renderRecetario(); });
+    $$("[data-nsave]").forEach((b) => b.onclick = () => {
+      const r = receta(b.dataset.nsave), tr = b.closest("tr");
+      const l = { sku: $("[data-nsku]", tr).value, cantidad: +$("[data-nq]", tr).value, desde: $("[data-nd]", tr).value || null, hasta: $("[data-nh]", tr).value || null };
+      const err = errorLinea(r, l, null);
+      if (err) return toast(err);
+      r.ingredientes.push(l); nuevaFila = null;
+      listo(`${insumo(l.sku).nombre} agregado: ${fDMY(l.desde)} → ${fDMY(l.hasta)}`);
     });
 
     $$("[data-ok]").forEach((b) => b.onclick = () => { receta(b.dataset.ok).estado = "aprobada"; save(); renderAll(); toast("Receta aprobada: disponible en el calendario"); });
@@ -340,7 +364,6 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
   $("#rc-vig").onchange = renderRecetario;
   $("#rc-fecha").onchange = (e) => { rcFecha = e.target.value || hoy(); renderRecetario(); };
   $("#rc-hoy").onclick = () => { rcFecha = hoy(); renderRecetario(); };
-  $("#rc-efectiva").value = hoy();
   $("#rc-all").onclick = () => { S.verRecetas = [...new Set([...(S.verRecetas || []), ...filtroRecetas().map((r) => r.id)])]; save(); renderRecetario(); };
   $("#rc-none").onclick = () => { S.verRecetas = []; save(); renderRecetario(); };
 
