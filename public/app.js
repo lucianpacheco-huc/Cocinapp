@@ -16,7 +16,8 @@
     calendario: JSON.parse(JSON.stringify(SEED.calendario)),
     semanas: {},          // n -> { estado, lineas, firma, liberada, entrega, pedido, recepcion }
     sapLog: [],
-    seq: { receta: 13, pedido: 1 }
+    seq: { receta: 13, pedido: 1 },
+    cal: { vista: "mes", fecha: SEED.inicioAnio }
   });
   let S;
   try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch { S = fresh(); }
@@ -368,32 +369,142 @@ Conecta ANTHROPIC_API_KEY en Netlify para obtener el informe real con fuentes we
   $("#rc-none").onclick = () => { S.verRecetas = []; save(); renderRecetario(); };
 
   // =====================================================================
-  // 3. CALENDARIO
+  // 3. CALENDARIO — vistas Mes / Semana / Día (tipo Google Calendar / Outlook) + Año (lista)
   // =====================================================================
+  const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const DSEM = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  const DSEM_L = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  const dObj = (iso) => new Date(iso + "T12:00:00");
+  const dISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const diaSem = (iso) => (dObj(iso).getDay() + 6) % 7;            // 0 = lunes
+  const lunesDe = (iso) => sumarDias(iso, -diaSem(iso));
+  const finAnio = () => sumarDias(SEED.inicioAnio, SEED.semanas * 7 - 1);
+  const enAnioEscolar = (iso) => iso >= SEED.inicioAnio && iso <= finAnio();
+  const semanaDe = (iso) => { if (!enAnioEscolar(iso)) return 0; return Math.floor((dObj(iso) - dObj(SEED.inicioAnio)) / 864e5 / 7) + 1; };
+  const fLarga = (iso) => { const d = dObj(iso); return `${DSEM_L[diaSem(iso)]} ${d.getDate()} de ${MESES[d.getMonth()]} ${d.getFullYear()}`; };
+
+  S.cal ||= { vista: "mes", fecha: SEED.inicioAnio };
+
+  // Clases de un día: cada curso tiene su día fijo de taller
+  const clasesDelDia = (iso) => {
+    const n = semanaDe(iso); if (!n) return [];
+    return SEED.cursos.filter((c) => (DIAS[c.dia] ?? -1) === diaSem(iso))
+      .map((c) => ({ n, c, f: iso, r: receta(S.calendario[n]?.[c.id]) }));
+  };
+  const bloqueadaSem = (n) => idx(S.semanas[n]?.estado || "planificada") >= idx("validada");
+  const noVigente = (ev) => ev.r && !recetaVigente(ev.r, ev.f) && !bloqueadaSem(ev.n);
+
+  // Selector de receta de una clase (solo recetas aprobadas y vigentes ese día)
+  function selectClase({ n, c, f, r }) {
+    const bloqueada = bloqueadaSem(n), malo = r && !recetaVigente(r, f) && !bloqueada;
+    const opts = `<option value="">— sin clase —</option>` +
+      (malo ? `<option value="${r.id}" selected>⚠ ${esc(r.nombre)} (no vigente)</option>` : "") +
+      S.recetas.filter((x) => x.estado === "aprobada" && (recetaVigente(x, f) || (bloqueada && x.id === r?.id)))
+        .map((x) => `<option value="${x.id}" ${r?.id === x.id ? "selected" : ""}>${esc(x.nombre)}</option>`).join("");
+    return `<select class="cal-sel" data-w="${n}" data-c="${c.id}" ${can("editarCalendario") && !bloqueada ? "" : "disabled"}>${opts}</select>`;
+  }
+  const badgeSem = (n) => { const st = S.semanas[n]?.estado || "planificada"; return `<span class="badge ${COLOR[st]}">${ETQ[st]}</span>`; };
+
+  // ---- Vista MES: un recuadro por día ----
+  function vistaMes() {
+    const d = dObj(S.cal.fecha), y = d.getFullYear(), m = d.getMonth();
+    const primero = `${y}-${pad(m + 1)}-01`, ultimo = dISO(new Date(y, m + 1, 0, 12));
+    let dia = lunesDe(primero); const fin = sumarDias(lunesDe(ultimo), 6);
+    let h = `<div class="mes">${DSEM.map((x) => `<div class="mes-h">${x}</div>`).join("")}`;
+    while (dia <= fin) {
+      const fuera = dObj(dia).getMonth() !== m, n = semanaDe(dia), evs = clasesDelDia(dia);
+      const cls = ["mes-d", fuera ? "fuera" : "", !enAnioEscolar(dia) ? "sin-clases" : "", diaSem(dia) > 4 ? "finde" : "", dia === hoy() ? "hoy" : ""].join(" ");
+      h += `<div class="${cls}" data-goday="${dia}" tabindex="0">
+        <div class="mes-num"><span>${dObj(dia).getDate()}</span>${diaSem(dia) === 0 && n ? `<small class="sem-tag" title="${ETQ[S.semanas[n]?.estado || "planificada"]}">S${n}<i class="dot ${COLOR[S.semanas[n]?.estado || "planificada"]}"></i></small>` : ""}</div>
+        ${evs.map((ev) => `<div class="ev cur-${ev.c.id} ${ev.r ? "" : "vacio"} ${noVigente(ev) ? "warn" : ""}" title="${esc(ev.c.nombre)}: ${esc(ev.r?.nombre || "sin clase")}"><b>${ev.c.id}</b> ${esc(ev.r?.nombre || "sin clase")}${noVigente(ev) ? " ⚠" : ""}</div>`).join("")}
+      </div>`;
+      dia = sumarDias(dia, 1);
+    }
+    return { titulo: `${MESES[m][0].toUpperCase() + MESES[m].slice(1)} ${y}`, html: h + "</div>" };
+  }
+
+  // ---- Vista SEMANA: 7 columnas con las clases editables ----
+  function vistaSemana() {
+    const ini = lunesDe(S.cal.fecha), n = semanaDe(ini) || semanaDe(sumarDias(ini, 4));
+    let h = `<div class="sem-info">${n ? `Semana escolar <b>${n}</b> ${badgeSem(n)} <button class="link" data-ir-ex="${n}">Ver explosión de materiales →</button>` : '<span class="meta">Fuera del año escolar</span>'}</div><div class="semana">`;
+    for (let k = 0; k < 7; k++) {
+      const dia = sumarDias(ini, k), evs = clasesDelDia(dia);
+      h += `<div class="sem-col ${k > 4 ? "finde" : ""} ${dia === hoy() ? "hoy" : ""}">
+        <div class="sem-h" data-goday="${dia}"><span>${DSEM[k]}</span><b>${dObj(dia).getDate()}</b></div>
+        ${evs.map((ev) => `<div class="ev-card cur-${ev.c.id} ${noVigente(ev) ? "warn" : ""}">
+            <div class="ev-t"><b>${esc(ev.c.nombre)}</b> · ${ev.c.alumnos * ev.c.porcionesPorAlumno} porc.</div>
+            <div class="ev-r">${esc(ev.r?.nombre || "Sin preparación")}</div>
+            ${selectClase(ev)}
+            ${noVigente(ev) ? `<div class="ev-w">⚠ Receta no vigente este día</div>` : ""}
+          </div>`).join("") || (k < 5 && enAnioEscolar(dia) ? '<div class="meta ev-vacio">Sin taller</div>' : "")}
+      </div>`;
+    }
+    const fin = sumarDias(ini, 6), d1 = dObj(ini), d2 = dObj(fin);
+    return { titulo: `${d1.getDate()} ${MESES[d1.getMonth()].slice(0, 3)} – ${d2.getDate()} ${MESES[d2.getMonth()].slice(0, 3)} ${d2.getFullYear()}`, html: h + "</div>" };
+  }
+
+  // ---- Vista DÍA: detalle de cada clase con sus ingredientes vigentes ese día ----
+  function vistaDia() {
+    const dia = S.cal.fecha, n = semanaDe(dia), evs = clasesDelDia(dia);
+    let h = `<div class="sem-info">${n ? `Semana escolar <b>${n}</b> ${badgeSem(n)} <button class="link" data-ir-ex="${n}">Ver explosión de materiales →</button>` : '<span class="meta">Fuera del año escolar</span>'}</div>`;
+    h += evs.map((ev) => {
+      const porc = ev.c.alumnos * ev.c.porcionesPorAlumno, ings = ev.r ? ingredientesEn(ev.r, dia) : [];
+      return `<div class="card dia-card cur-${ev.c.id}">
+        <div class="dia-top"><div><h3>${esc(ev.c.nombre)}</h3><p class="meta">${ev.c.alumnos} alumnos · ${porc} porciones · taller del ${ev.c.dia.toLowerCase()}</p></div>${selectClase(ev)}</div>
+        ${noVigente(ev) ? `<p class="ev-w">⚠ "${esc(ev.r.nombre)}" no está vigente el ${fDMY(dia)} (vigencia ${fDMY(ev.r.vigenteDesde)} → ${fDMY(ev.r.vigenteHasta)}).</p>` : ""}
+        ${ev.r ? `<table class="data"><thead><tr><th>Ingrediente vigente este día</th><th class="num">Receta (${ev.r.porciones_base} porc.)</th><th class="num">Para ${porc} porc.</th></tr></thead><tbody>
+          ${ings.map((l) => { const i = insumo(l.sku); return `<tr><td>${esc(i?.nombre || l.sku)}</td><td class="num">${fmt(l.cantidad)} ${i?.unidad || ""}</td><td class="num">${fmt(l.cantidad * porc / ev.r.porciones_base, 0)} ${i?.unidad || ""}</td></tr>`; }).join("")}
+          </tbody></table>` : '<p class="meta">Sin preparación asignada.</p>'}
+      </div>`;
+    }).join("") || `<div class="empty card">${diaSem(dia) > 4 ? "Fin de semana: sin talleres." : n ? "No hay talleres de cocina este día." : "Fuera del año escolar."}</div>`;
+    return { titulo: fLarga(dia).replace(/^./, (x) => x.toUpperCase()), html: h };
+  }
+
+  // ---- Vista AÑO: lista de las 38 semanas × cursos ----
+  function vistaAnio() {
+    let h = `<div class="table-wrap"><table class="cal"><thead><tr><th>Sem.</th><th>Lunes</th>${SEED.cursos.map((c) => `<th>${c.nombre}<br><small>${c.alumnos} alumnos · ${c.dia}</small></th>`).join("")}<th>Estado</th></tr></thead><tbody>`;
+    for (let n = 1; n <= SEED.semanas; n++) {
+      h += `<tr><td class="wk">${n}</td><td>${fCorta(lunes(n))}</td>${SEED.cursos.map((c) => {
+        const ev = { n, c, f: fechaClase(n, c), r: receta(S.calendario[n]?.[c.id]) };
+        return `<td class="${noVigente(ev) ? "cal-warn" : ""}">${selectClase(ev)}</td>`;
+      }).join("")}<td>${badgeSem(n)}</td></tr>`;
+    }
+    return { titulo: `Año escolar ${SEED.anio}`, html: h + "</tbody></table></div>" };
+  }
+
   function renderCalendario() {
     const editable = can("editarCalendario");
     $("#cal-perm").innerHTML = editable ? '<span class="badge b-green">Puedes editar</span>' : '<span class="badge b-gray">Solo lectura (requiere Coordinador/a)</span>';
-    const aprobadas = S.recetas.filter((r) => r.estado === "aprobada");
-    let h = `<thead><tr><th>Sem.</th><th>Lunes</th>${SEED.cursos.map((c) => `<th>${c.nombre}<br><small>${c.alumnos} alumnos · ${c.dia}</small></th>`).join("")}<th>Estado</th></tr></thead><tbody>`;
-    for (let n = 1; n <= SEED.semanas; n++) {
-      const fila = S.calendario[n] || {}, st = S.semanas[n]?.estado || "planificada", bloqueada = idx(st) >= idx("validada");
-      h += `<tr><td class="wk">${n}</td><td>${fCorta(lunes(n))}</td>${SEED.cursos.map((c) => {
-        // Solo se ofrecen recetas vigentes en la fecha de esa clase
-        const f = fechaClase(n, c), actual = receta(fila[c.id]);
-        const malo = actual && !recetaVigente(actual, f) && !bloqueada;
-        const opts = `<option value="">— sin clase —</option>` +
-          (malo ? `<option value="${actual.id}" selected>⚠ ${esc(actual.nombre)} (no vigente)</option>` : "") +
-          aprobadas.filter((r) => recetaVigente(r, f) || (bloqueada && r.id === fila[c.id])).map((r) => `<option value="${r.id}" ${fila[c.id] === r.id ? "selected" : ""}>${esc(r.nombre)}</option>`).join("");
-        return `<td class="${malo ? "cal-warn" : ""}" ${malo ? `title="Vigente ${fDMY(actual.vigenteDesde)} → ${fDMY(actual.vigenteHasta)}; la clase es el ${fDMY(f)}"` : ""}><select data-w="${n}" data-c="${c.id}" ${editable && !bloqueada ? "" : "disabled"}>${opts}</select></td>`;
-      }).join("")}<td><span class="badge ${COLOR[st]}">${ETQ[st]}</span></td></tr>`;
-    }
-    $("#cal-table").innerHTML = h + "</tbody>";
-    $$("#cal-table select").forEach((s) => s.onchange = () => {
+    $$("#cal-vistas button").forEach((b) => b.classList.toggle("active", b.dataset.vista === S.cal.vista));
+    const v = { mes: vistaMes, semana: vistaSemana, dia: vistaDia, anio: vistaAnio }[S.cal.vista]();
+    $("#cal-titulo").textContent = v.titulo;
+    $("#cal-nav").style.visibility = S.cal.vista === "anio" ? "hidden" : "visible";
+    $("#cal-view").innerHTML = v.html;
+    $("#cal-leyenda").innerHTML = SEED.cursos.map((c) => `<span class="ley cur-${c.id}"><i></i>${c.nombre} · ${c.dia}</span>`).join("");
+
+    $$("#cal-view [data-goday]").forEach((el) => {
+      const ir = () => { S.cal = { vista: "dia", fecha: el.dataset.goday }; save(); renderCalendario(); };
+      el.onclick = (e) => { if (!e.target.closest("select")) ir(); };
+      el.onkeydown = (e) => { if (e.key === "Enter") ir(); };
+    });
+    $$("#cal-view [data-ir-ex]").forEach((b) => b.onclick = () => { S.semana = +b.dataset.irEx; save(); renderAll(); go("explosion"); });
+    $$("#cal-view .cal-sel").forEach((s) => s.onchange = () => {
       const w = s.dataset.w; (S.calendario[w] ||= {})[s.dataset.c] = s.value || undefined;
       if (S.semanas[w]?.estado === "explotada") { S.semanas[w] = { estado: "planificada" }; toast(`Semana ${w}: BOM invalidada, vuelve a explotar`); }
-      save();
+      save(); renderAll();
     });
   }
+  const moverCal = (dir) => {
+    const f = S.cal.fecha, v = S.cal.vista;
+    if (v === "mes") { const d = dObj(f); S.cal.fecha = dISO(new Date(d.getFullYear(), d.getMonth() + dir, 1, 12)); }
+    else S.cal.fecha = sumarDias(f, dir * (v === "semana" ? 7 : 1));
+    save(); renderCalendario();
+  };
+  $("#cal-prev").onclick = () => moverCal(-1);
+  $("#cal-next").onclick = () => moverCal(1);
+  $("#cal-hoy").onclick = () => { S.cal.fecha = hoy(); save(); renderCalendario(); };
+  $("#cal-inicio").onclick = () => { S.cal.fecha = SEED.inicioAnio; save(); renderCalendario(); };
+  $$("#cal-vistas button").forEach((b) => b.onclick = () => { S.cal.vista = b.dataset.vista; save(); renderCalendario(); });
 
   // =====================================================================
   // 4. EXPLOSIÓN DE MATERIALES — algoritmo MRP simplificado

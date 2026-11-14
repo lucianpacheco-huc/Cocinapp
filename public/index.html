@@ -30,7 +30,7 @@
 <nav class="steps" id="tabs">
   <button data-tab="ideacion" class="active"><span>1</span>Ideación</button>
   <button data-tab="recetario"><span>2</span>Recetario</button>
-  <button data-tab="calendario"><span>3</span>Calendario anual</button>
+  <button data-tab="calendario"><span>3</span>Calendario</button>
   <button data-tab="explosion"><span>4</span>Explosión de materiales</button>
   <button data-tab="validacion"><span>5</span>Validar y liberar</button>
   <button data-tab="proveedor"><span>6</span>Proveedor · Pedidos</button>
@@ -99,10 +99,22 @@
   <!-- 3. CALENDARIO -->
   <section id="tab-calendario" class="tab">
     <div class="head">
-      <h1>Calendario anual de clases</h1>
-      <p>El/la profesor/a coordinador/a define qué preparación se realiza cada semana en cada curso. <span id="cal-perm"></span></p>
+      <h1>Calendario de clases</h1>
+      <p>El/la profesor/a coordinador/a define qué preparación se realiza en cada taller. Toca un día para ver su detalle. <span id="cal-perm"></span></p>
     </div>
-    <div class="table-wrap"><table id="cal-table" class="cal"></table></div>
+    <div class="cal-bar">
+      <div class="cal-left">
+        <button class="sec" id="cal-hoy">Hoy</button>
+        <button class="sec" id="cal-inicio" title="Ir al inicio del año escolar">Inicio de clases</button>
+        <span id="cal-nav"><button class="nav" id="cal-prev" aria-label="Anterior">‹</button><button class="nav" id="cal-next" aria-label="Siguiente">›</button></span>
+        <h2 id="cal-titulo"></h2>
+      </div>
+      <div class="seg" id="cal-vistas">
+        <button data-vista="dia">Día</button><button data-vista="semana">Semana</button><button data-vista="mes">Mes</button><button data-vista="anio">Año</button>
+      </div>
+    </div>
+    <div id="cal-leyenda" class="leyenda"></div>
+    <div id="cal-view"></div>
   </section>
 
   <!-- 4. EXPLOSIÓN -->

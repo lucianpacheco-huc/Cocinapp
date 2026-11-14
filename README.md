@@ -30,7 +30,7 @@ Cocinapp/
 |---|---|---|---|
 | 1 | Ideación IA | Alumno/a, Profesor/a | Informe de estado del arte (Chile + mundo) y propuesta convertida en receta estandarizada |
 | 2 | Recetario | Profesor/a | Evaluación con rúbrica IA y aprobación de propuestas |
-| 3 | Calendario anual | **Profesor/a coordinador/a** | 38 semanas × cursos (3°A, 3°B, 4°A, 4°B) con la preparación de cada clase |
+| 3 | Calendario | **Profesor/a coordinador/a** | Vistas **Mes** (un recuadro por día, como Google Calendar / Outlook), **Semana**, **Día** (detalle con ingredientes vigentes y cantidades para el curso) y **Año** (lista de 38 semanas × cursos) |
 | 4 | Explosión de materiales | Profesor/a | Lista consolidada de insumos de la semana, todo el colegio, desglosada por nivel |
 | 5 | Validar y liberar | Profesor/a | Ajuste, **firma** (lista firme) y liberación al proveedor |
 | 6 | Proveedor · Pedidos | Proveedor | Programa la entrega → se genera **solicitud de pedido** (OC en SAP) → despacho |
